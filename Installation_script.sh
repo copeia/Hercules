@@ -19,13 +19,16 @@ read -p "Please enter the name for this RO WISP Service: " RO_WISP_SERVER
 echo "Updating the server:"
 apt -y update
 
+read -p "How many GB should of swap should we create? " SWAPGB
+echo "Enabling swap now..."
 # Configure some swap since we will most likely 
 # consume more memory than we have on this small vm
-fallocate -l 4G /swapfile
+fallocate -l ${SWAPGB}G /swapfile
 chmod 600 /swapfile
 mkswap /swapfile
 swapon /swapfile
 echo "/swapfile   none    swap    sw    0   0" >> /etc/fstab
+echo "Complete"
 
 # Install Deps
 echo "Installing Deps:"
@@ -46,7 +49,10 @@ apt -y install \
   php-mbstring \
   phpmyadmin
 
+echo "Complete"
+
 # Enabling mysql at boot
+echo "Enabling MySQL and Configuring httpd"
 systemctl enable mysql
 systemctl start mysql
 
@@ -54,10 +60,13 @@ systemctl start mysql
 phpenmod mbstring
 systemctl restart apache2
 
+echo "Complete"
+
 # Update mysql root user to require password
 echo "Setting root user password for MySQL:" 
 mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${DBPASS}';"
 mysql -e "FLUSH PRIVILEGES;" --password="${DBPASS}"
+echo "Complete"
 
 echo "Verifying new password:"
 mysql -e "SELECT user,authentication_string,plugin,host FROM mysql.user;" --password="${DBPASS}"
@@ -68,28 +77,34 @@ echo "PhpMyAdmin now available: https://${IP}/phpmyadmin"
 echo "Login with the root user and password you just created"
 
 # Create RO Databases 
+echo "Creating Ragnarok SQL database"
 mysql -e "CREATE DATABASE ragnarok;" --password="${DBPASS}"
+echo "Complete"
 
 echo "Creating RO MySQL user and granting full perms on the RO and RO_Log dbs: "
 
 mysql -e "CREATE USER 'ragnarok'@'localhost' IDENTIFIED BY '${RODBPASS}';" --password="${DBPASS}"
 mysql -e "GRANT ALL PRIVILEGES ON ragnarok.* TO 'ragnarok'@'localhost';" --password="${DBPASS}"
+echo "Complete"
 
 # Create RO server user 
 echo "Creating RO server user: "
 useradd --create-home --shell /bin/bash ragnarok
 passwd ragnarok
+echo "Complete"
 
 # Create log files
 echo "Creating RO server stdout log: /var/log/ragnarok_stdout.log"
 touch /var/log/ragnarok_stdout.log
 chown ragnarok:ragnarok $_
+echo "Complete"
 
 # Install Hercules Framework
 echo "Download Hercules Framework"
 su ragnarok 
 git clone https://github.com/copeia/Hercules.git ~/Hercules
 cd ~/Hercules/sql-files/
+echo "Complete"
 
 # Import DB tables 
 echo "Importing DB Tables: "
@@ -112,6 +127,7 @@ SET
 WHERE
     account_id = '1';
 "
+echo "Complete"
 
 # Update Hercules config with correct database info
 cd ~/Hercules/
@@ -142,12 +158,15 @@ sed -i "s#//\"127.0.0.1:255.0.0.0\"#\"127.0.0.1:255.0.0.0\"#g" conf/network.conf
 
 # Update for the RO version we'd like to run 
 sed -i "s/#define PACKETVER 20190530/#define PACKETVER 20150513/g" src/common/mmo.h
+echo "Complete"
 
 # Build the server binary
 echo "Building the server binary - This may take a few minutes..." 
 bash ./configure --enable-packetver=20150513
 make clean
 make sql
+
+echo "Complete"
 
 # Start the server
 echo "Starting the server and tailing the logs: "
